@@ -35,7 +35,7 @@
 }
 
 () send_to_jetton_wallet(slice to_address, cell jetton_wallet_code, int ton_amount, cell master_msg, int need_state_init) impure inline {
-    raw_reserve(ONE_TON, RESERVE_REGULAR); ;; reserve for storage fees
+    raw_reserve(ONE_TON / 100, RESERVE_REGULAR); ;; reserve for storage fees
 
     cell state_init = calculate_jetton_wallet_state_init(to_address, my_address(), jetton_wallet_code);
     slice to_wallet_address = calculate_jetton_wallet_address(state_init);
@@ -176,45 +176,10 @@
         return ();
     }
 
-    ;; can be used to lock, unlock or reedem funds
-    if (op == op::call_to) {
+    if (op == op::drop_admin) {
         throw_unless(error::not_owner, equal_slices_bits(sender_address, admin_address));
-        slice to_address = in_msg_body~load_msg_addr();
-        int ton_amount = in_msg_body~load_coins();
-        cell master_msg = in_msg_body~load_ref();
         in_msg_body.end_parse();
-
-        slice master_msg_slice = master_msg.begin_parse();
-        int master_op = master_msg_slice~load_op();
-        master_msg_slice~skip_query_id();
-        ;; parse-validate messages
-        if (master_op == op::transfer) {
-            ;; see transfer TL-B layout in jetton.tlb
-            master_msg_slice~load_coins(); ;; jetton_amount
-            master_msg_slice~load_msg_addr(); ;; to_owner_address
-            master_msg_slice~load_msg_addr(); ;; response_address
-            master_msg_slice~skip_maybe_ref(); ;; custom_payload
-            int forward_ton_amount = master_msg_slice~load_coins(); ;; forward_ton_amount
-            check_either_forward_payload(master_msg_slice); ;; either_forward_payload
-
-            check_amount_is_enough_to_transfer(ton_amount, forward_ton_amount, fwd_fee);
-
-        } elseif (master_op == op::burn) {
-            ;; see burn TL-B layout in jetton.tlb
-            master_msg_slice~load_coins(); ;; jetton_amount
-            master_msg_slice~load_msg_addr(); ;; response_address
-            master_msg_slice~skip_maybe_ref(); ;; custom_payload
-            master_msg_slice.end_parse();
-
-            check_amount_is_enough_to_burn(ton_amount);
-
-        } elseif (master_op == op::set_status) {
-            master_msg_slice~load_uint(STATUS_SIZE); ;; status
-            master_msg_slice.end_parse();
-        } else {
-            throw(error::invalid_op);
-        }
-        send_to_jetton_wallet(to_address, jetton_wallet_code, ton_amount, master_msg, FALSE);
+        save_data(total_supply, address_none(), address_none(), jetton_wallet_code, metadata_uri);
         return ();
     }
 
@@ -243,7 +208,7 @@
 cell build_content_cell(slice metadata_uri) inline {
     cell content_dict = new_dict();
     content_dict~set_token_snake_metadata_entry("uri"H, metadata_uri);
-    content_dict~set_token_snake_metadata_entry("decimals"H, "6");
+    content_dict~set_token_snake_metadata_entry("decimals"H, "9");
     return create_token_onchain_metadata(content_dict);
 }
 
